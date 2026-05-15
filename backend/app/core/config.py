@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     chroma_host: str = "localhost"
     chroma_port: int = 8001
+    deepseek_api_key: str = ""
+    deepseek_model: str = "deepseek-chat"
+    deepseek_base_url: str = "https://api.deepseek.com"
+    embedding_model: str = "chroma-default"
+    rag_collection_name: str = "competitive_intelligence"
+    rag_chunk_size: int = 1200
+    rag_chunk_overlap: int = 180
 
     @field_validator("backend_cors_origins", mode="before")
     @classmethod

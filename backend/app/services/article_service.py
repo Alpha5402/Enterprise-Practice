@@ -23,6 +23,10 @@ class ArticleService:
             statement = statement.where(NewsArticle.competitor_id == competitor_id)
         return list(self.db.scalars(statement).all())
 
+    def get_article(self, article_id: UUID) -> NewsArticle | None:
+        """Return an article by id."""
+        return self.db.get(NewsArticle, article_id)
+
     def get_by_url(self, url: str) -> NewsArticle | None:
         """Return an article by canonical URL."""
         statement = select(NewsArticle).where(NewsArticle.url == url)
@@ -42,4 +46,3 @@ class ArticleService:
         if existing is not None:
             return existing
         return self.create_article(payload)
-

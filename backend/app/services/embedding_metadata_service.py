@@ -33,3 +33,19 @@ class EmbeddingMetadataService:
         self.db.refresh(metadata)
         return metadata
 
+    def replace_for_article(
+        self,
+        article_id: UUID,
+        payloads: list[EmbeddingMetadataCreate],
+    ) -> list[EmbeddingMetadata]:
+        """Replace all vector metadata records for an article."""
+        existing = self.list_by_article(article_id)
+        for metadata in existing:
+            self.db.delete(metadata)
+        records = [EmbeddingMetadata(**payload.model_dump()) for payload in payloads]
+        self.db.add_all(records)
+        self.db.commit()
+        for record in records:
+            self.db.refresh(record)
+        return records
+

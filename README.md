@@ -19,6 +19,14 @@ Enterprise-grade competitive dynamics tracking and benchmark analysis system bas
 - APScheduler service boundary for recurring RSS collection jobs.
 - Report read APIs: `GET /api/v1/reports` and `GET /api/v1/reports/{id}`.
 
+## Stage 3 Scope
+
+- Text chunking for collected article content.
+- LangChain-compatible local embedding provider for RAG indexing.
+- `VectorStoreService` abstraction with ChromaDB implementation.
+- RAG indexing service that stores chunks in Chroma and records `embeddings_metadata`.
+- RAG retrieval API for semantically searching indexed chunks.
+
 ## Local Development
 
 ```bash
@@ -30,6 +38,8 @@ The backend container runs `alembic upgrade head` before starting FastAPI, so a 
 
 Backend docs are available at `http://localhost:8000/docs`.
 Frontend is available at `http://localhost:5173`.
+
+DeepSeek model calls require `DEEPSEEK_API_KEY` in `.env`. RAG indexing uses a LangChain-compatible local embedding adapter backed by Chroma's default embedding function.
 
 ## Quality Checks
 
