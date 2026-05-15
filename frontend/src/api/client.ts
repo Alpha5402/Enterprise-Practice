@@ -121,6 +121,7 @@ export const apiClient = {
     request<NewsArticle[]>(competitorId ? `/articles?competitor_id=${competitorId}` : "/articles"),
   listReports: (competitorId?: string) =>
     request<AnalysisReport[]>(competitorId ? `/reports?competitor_id=${competitorId}` : "/reports"),
+  getReport: (id: string) => request<AnalysisReport>(`/reports/${id}`),
   listSources: (competitorId?: string) =>
     request<SourceConfig[]>(competitorId ? `/sources?competitor_id=${competitorId}` : "/sources"),
   createCompetitor: (payload: CompetitorCreate) =>

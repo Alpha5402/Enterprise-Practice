@@ -50,7 +50,6 @@ export function Dashboard() {
   const [query, setQuery] = useState("最新竞品动态");
   const [statusMessage, setStatusMessage] = useState("");
   const [streamMessage, setStreamMessage] = useState("");
-  const [selectedReport, setSelectedReport] = useState<AnalysisReport | null>(null);
 
   const competitorsQuery = useQuery({ queryKey: ["competitors"], queryFn: apiClient.listCompetitors });
   const reportsQuery = useQuery({
@@ -85,7 +84,6 @@ export function Dashboard() {
     mutationFn: apiClient.deleteCompetitor,
     onSuccess: () => {
       setSelectedCompetitorId("");
-      setSelectedReport(null);
       setStatusMessage("竞品已删除。");
       queryClient.invalidateQueries();
     },
@@ -387,7 +385,7 @@ export function Dashboard() {
               ) : (
                 <div className="divide-y">
                   {reports.slice(0, 6).map((report) => (
-                    <button key={report.id} className="w-full py-3 text-left" onClick={() => setSelectedReport(report)}>
+                    <a key={report.id} className="block w-full py-3 text-left" href={`/reports/${report.id}`}>
                       <div className="flex items-center justify-between gap-3">
                         <p className="font-medium">{dimensionLabel[report.dimension]}</p>
                         <span className="rounded-md border px-2 py-1 text-xs text-muted-foreground">
@@ -395,30 +393,13 @@ export function Dashboard() {
                         </span>
                       </div>
                       <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{report.summary}</p>
-                    </button>
+                    </a>
                   ))}
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
-
-        {selectedReport ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>报告详情 · {dimensionLabel[selectedReport.dimension]}</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 text-sm">
-              <p>{selectedReport.summary}</p>
-              <DetailList title="机会点" items={selectedReport.opportunity_points} />
-              <DetailList title="威胁点" items={selectedReport.threat_points} />
-              <p className="text-muted-foreground">
-                风险等级：{riskLabel[selectedReport.risk_level]} · 置信度：
-                {(selectedReport.confidence_score * 100).toFixed(0)}%
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
 
         <div className="grid gap-5 lg:grid-cols-2">
           <ChartCard title="行业分布" empty={industryData.length === 0}>
@@ -460,17 +441,6 @@ function EmptyState({ text, icon }: { text: string; icon?: React.ReactNode }) {
     <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-md border border-dashed text-center text-sm text-muted-foreground">
       {icon}
       {text}
-    </div>
-  );
-}
-
-function DetailList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <p className="font-medium">{title}</p>
-      <ul className="mt-2 grid gap-1 text-muted-foreground">
-        {items.length === 0 ? <li>暂无</li> : items.map((item) => <li key={item}>{item}</li>)}
-      </ul>
     </div>
   );
 }
