@@ -1,0 +1,70 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      chromadb:
+        condition: service_started
+    volumes:
+      - ./backend:/app/backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    env_file:
+      - path: .env.example
+      - path: .env
+        required: false
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app/frontend
+      - /app/frontend/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: competitive_intel
+      POSTGRES_USER: competitive_intel
+      POSTGRES_PASSWORD: competitive_intel
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U competitive_intel -d competitive_intel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  chromadb:
+    image: chromadb/chroma:0.5.23
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+
+volumes:
+  postgres_data:
+  chroma_data:
