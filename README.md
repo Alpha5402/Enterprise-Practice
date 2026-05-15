@@ -35,6 +35,13 @@ Enterprise-grade competitive dynamics tracking and benchmark analysis system bas
 - Strict Pydantic JSON parsing for agent outputs.
 - Analysis API: `POST /api/v1/analyze`.
 
+## Stage 5 Scope
+
+- Collection API: `POST /api/v1/collect`.
+- Article list API: `GET /api/v1/articles`.
+- Competitor batch indexing API: `POST /api/v1/competitors/{id}/index`.
+- Frontend operations dashboard for collect, index, analyze, and report review.
+
 ## Local Development
 
 ```bash
@@ -48,6 +55,15 @@ Backend docs are available at `http://localhost:8000/docs`.
 Frontend is available at `http://localhost:5173`.
 
 DeepSeek model calls require `DEEPSEEK_API_KEY` in `.env`. RAG indexing uses a LangChain-compatible local embedding adapter backed by Chroma's default embedding function.
+
+Basic workflow:
+
+1. Create a competitor.
+2. Select the competitor in the dashboard.
+3. Collect from an RSS or web URL.
+4. Index collected articles.
+5. Run analysis and review generated reports.
+
 
 ## Quality Checks
 

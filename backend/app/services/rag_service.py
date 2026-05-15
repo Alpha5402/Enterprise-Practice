@@ -92,6 +92,13 @@ class RagService:
         vector_store.add_documents(documents)
         return self.metadata_service.replace_for_article(article.id, metadata_payloads)
 
+    def index_competitor_articles(self, competitor_id: UUID) -> list[EmbeddingMetadata]:
+        """Index all collected articles for a competitor."""
+        indexed: list[EmbeddingMetadata] = []
+        for article in self.article_service.list_articles(competitor_id=competitor_id):
+            indexed.extend(self.index_article(article.id))
+        return indexed
+
     def search(
         self,
         query: str,

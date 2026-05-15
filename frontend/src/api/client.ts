@@ -19,6 +19,60 @@ export interface CompetitorCreate {
   enabled: boolean;
 }
 
+export interface NewsArticle {
+  id: string;
+  competitor_id: string;
+  source_type: string;
+  source_name: string;
+  url: string;
+  title: string;
+  content: string;
+  cleaned_content: string;
+  published_at: string | null;
+  collected_at: string;
+  extra_metadata: Record<string, string>;
+}
+
+export interface AnalysisReport {
+  id: string;
+  competitor_id: string;
+  competitor: string;
+  dimension: "sentiment" | "price" | "product" | "summary";
+  risk_level: "low" | "medium" | "high" | "critical";
+  summary: string;
+  opportunity_points: string[];
+  threat_points: string[];
+  confidence_score: number;
+  source_article_ids: string[];
+  created_at: string;
+}
+
+export interface CollectRequest {
+  competitor_id: string;
+  source_url: string;
+  crawler: "rss" | "web";
+}
+
+export interface CollectResponse {
+  collected_count: number;
+  articles: NewsArticle[];
+}
+
+export interface IndexCompetitorResponse {
+  competitor_id: string;
+  metadata_count: number;
+}
+
+export interface AnalyzeRequest {
+  competitor_id: string;
+  query: string;
+  context_limit: number;
+}
+
+export interface AnalyzeResponse {
+  reports: AnalysisReport[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
@@ -42,6 +96,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const apiClient = {
   listCompetitors: () => request<Competitor[]>("/competitors"),
+  listArticles: (competitorId?: string) =>
+    request<NewsArticle[]>(competitorId ? `/articles?competitor_id=${competitorId}` : "/articles"),
+  listReports: (competitorId?: string) =>
+    request<AnalysisReport[]>(competitorId ? `/reports?competitor_id=${competitorId}` : "/reports"),
   createCompetitor: (payload: CompetitorCreate) =>
     request<Competitor>("/competitors", {
       method: "POST",
@@ -51,5 +109,18 @@ export const apiClient = {
     request<void>(`/competitors/${id}`, {
       method: "DELETE",
     }),
+  collect: (payload: CollectRequest) =>
+    request<CollectResponse>("/collect", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  indexCompetitor: (competitorId: string) =>
+    request<IndexCompetitorResponse>(`/competitors/${competitorId}/index`, {
+      method: "POST",
+    }),
+  analyze: (payload: AnalyzeRequest) =>
+    request<AnalyzeResponse>("/analyze", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };
-
