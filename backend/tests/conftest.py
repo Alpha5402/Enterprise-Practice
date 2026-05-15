@@ -10,9 +10,9 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models import AnalysisReport, Competitor, EmbeddingMetadata, NewsArticle
+from app.models import AnalysisReport, Competitor, EmbeddingMetadata, NewsArticle, SourceConfig
 
-_ = (AnalysisReport, Competitor, EmbeddingMetadata, NewsArticle)
+_ = (AnalysisReport, Competitor, EmbeddingMetadata, NewsArticle, SourceConfig)
 
 engine = create_engine(
     "sqlite://",

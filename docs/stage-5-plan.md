@@ -16,8 +16,14 @@
 
 ## Remaining Work
 
-- Add SSE streaming for analysis progress.
-- Add dedicated report detail page.
-- Add source configuration persistence instead of one-off URL input.
+- Add richer SSE progress events for each individual agent node.
+- Add full route-based report detail page.
 - Add scheduled daily collection and analysis workflow.
 
+## Added After Stage 5
+
+- Simplified Chinese dashboard interaction copy.
+- Persistent source configuration API and dashboard controls.
+- Basic SSE analysis progress endpoint.
+- Inline report detail panel.
+- One-shot daily automation endpoint for saved-source collection, indexing, and analysis.

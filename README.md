@@ -64,6 +64,10 @@ Basic workflow:
 4. Index collected articles.
 5. Run analysis and review generated reports.
 
+Automation endpoint:
+
+- `POST /api/v1/automation/daily-run` runs saved-source collection, indexing, and analysis once.
+
 
 ## Quality Checks
 

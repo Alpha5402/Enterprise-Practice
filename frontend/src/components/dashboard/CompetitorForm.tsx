@@ -35,19 +35,18 @@ export function CompetitorForm({ isSubmitting, onSubmit }: CompetitorFormProps) 
 
   return (
     <form className="grid gap-3 md:grid-cols-[1fr_1fr_1.4fr_1fr_auto]" onSubmit={handleSubmit}>
-      <Input required placeholder="Competitor" value={name} onChange={(event) => setName(event.target.value)} />
-      <Input required placeholder="Industry" value={industry} onChange={(event) => setIndustry(event.target.value)} />
+      <Input required placeholder="竞品名称" value={name} onChange={(event) => setName(event.target.value)} />
+      <Input required placeholder="行业" value={industry} onChange={(event) => setIndustry(event.target.value)} />
       <Input
-        placeholder="Description"
+        placeholder="描述"
         value={description}
         onChange={(event) => setDescription(event.target.value)}
       />
-      <Input placeholder="Keywords" value={keywords} onChange={(event) => setKeywords(event.target.value)} />
+      <Input placeholder="关键词，用逗号分隔" value={keywords} onChange={(event) => setKeywords(event.target.value)} />
       <Button type="submit" disabled={isSubmitting}>
         <Plus className="h-4 w-4" />
-        Add
+        添加
       </Button>
     </form>
   );
 }
-

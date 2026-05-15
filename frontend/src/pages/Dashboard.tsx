@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
+import type React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Database, FileText, Play, RadarIcon, Search, Trash2 } from "lucide-react";
 import {
@@ -14,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { apiClient, type Competitor, type AnalysisReport } from "@/api/client";
+import { apiClient, type AnalysisReport, type Competitor } from "@/api/client";
 import { CompetitorForm } from "@/components/dashboard/CompetitorForm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,8 @@ import { Input } from "@/components/ui/input";
 
 const EMPTY_COMPETITORS: Competitor[] = [];
 const EMPTY_REPORTS: AnalysisReport[] = [];
+const riskLabel = { low: "低", medium: "中", high: "高", critical: "严重" };
+const dimensionLabel = { sentiment: "舆情", price: "价格", product: "产品", summary: "汇总" };
 
 function buildIndustryData(competitors: Competitor[]) {
   const counts = new Map<string, number>();
@@ -32,9 +35,8 @@ function buildIndustryData(competitors: Competitor[]) {
 }
 
 function buildRiskData(reports: AnalysisReport[]) {
-  const levels = ["low", "medium", "high", "critical"];
-  return levels.map((level) => ({
-    level,
+  return (["low", "medium", "high", "critical"] as const).map((level) => ({
+    level: riskLabel[level],
     count: reports.filter((report) => report.risk_level === level).length,
   }));
 }
@@ -43,14 +45,14 @@ export function Dashboard() {
   const queryClient = useQueryClient();
   const [selectedCompetitorId, setSelectedCompetitorId] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceName, setSourceName] = useState("");
   const [crawler, setCrawler] = useState<"rss" | "web">("rss");
-  const [query, setQuery] = useState("latest competitive signals");
+  const [query, setQuery] = useState("最新竞品动态");
   const [statusMessage, setStatusMessage] = useState("");
+  const [streamMessage, setStreamMessage] = useState("");
+  const [selectedReport, setSelectedReport] = useState<AnalysisReport | null>(null);
 
-  const competitorsQuery = useQuery({
-    queryKey: ["competitors"],
-    queryFn: apiClient.listCompetitors,
-  });
+  const competitorsQuery = useQuery({ queryKey: ["competitors"], queryFn: apiClient.listCompetitors });
   const reportsQuery = useQuery({
     queryKey: ["reports", selectedCompetitorId],
     queryFn: () => apiClient.listReports(selectedCompetitorId || undefined),
@@ -58,6 +60,10 @@ export function Dashboard() {
   const articlesQuery = useQuery({
     queryKey: ["articles", selectedCompetitorId],
     queryFn: () => apiClient.listArticles(selectedCompetitorId || undefined),
+  });
+  const sourcesQuery = useQuery({
+    queryKey: ["sources", selectedCompetitorId],
+    queryFn: () => apiClient.listSources(selectedCompetitorId || undefined),
   });
 
   const competitors = competitorsQuery.data ?? EMPTY_COMPETITORS;
@@ -71,7 +77,7 @@ export function Dashboard() {
     mutationFn: apiClient.createCompetitor,
     onSuccess: (competitor) => {
       setSelectedCompetitorId(competitor.id);
-      setStatusMessage("Competitor created.");
+      setStatusMessage("竞品已添加。");
       queryClient.invalidateQueries({ queryKey: ["competitors"] });
     },
   });
@@ -79,31 +85,52 @@ export function Dashboard() {
     mutationFn: apiClient.deleteCompetitor,
     onSuccess: () => {
       setSelectedCompetitorId("");
-      setStatusMessage("Competitor deleted.");
-      queryClient.invalidateQueries({ queryKey: ["competitors"] });
-      queryClient.invalidateQueries({ queryKey: ["reports"] });
-      queryClient.invalidateQueries({ queryKey: ["articles"] });
+      setSelectedReport(null);
+      setStatusMessage("竞品已删除。");
+      queryClient.invalidateQueries();
     },
   });
   const collectMutation = useMutation({
     mutationFn: apiClient.collect,
     onSuccess: (response) => {
-      setStatusMessage(`Collected ${response.collected_count} article(s).`);
+      setStatusMessage(`已采集 ${response.collected_count} 篇文章。`);
+      queryClient.invalidateQueries({ queryKey: ["articles"] });
+    },
+    onError: (error) => setStatusMessage(error.message),
+  });
+  const createSourceMutation = useMutation({
+    mutationFn: apiClient.createSource,
+    onSuccess: () => {
+      setStatusMessage("数据源已保存。");
+      setSourceName("");
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+    },
+    onError: (error) => setStatusMessage(error.message),
+  });
+  const deleteSourceMutation = useMutation({
+    mutationFn: apiClient.deleteSource,
+    onSuccess: () => {
+      setStatusMessage("数据源已删除。");
+      queryClient.invalidateQueries({ queryKey: ["sources"] });
+    },
+  });
+  const collectSourceMutation = useMutation({
+    mutationFn: apiClient.collectSource,
+    onSuccess: (response) => {
+      setStatusMessage(`已从保存的数据源采集 ${response.collected_count} 篇文章。`);
       queryClient.invalidateQueries({ queryKey: ["articles"] });
     },
     onError: (error) => setStatusMessage(error.message),
   });
   const indexMutation = useMutation({
     mutationFn: apiClient.indexCompetitor,
-    onSuccess: (response) => {
-      setStatusMessage(`Indexed ${response.metadata_count} chunk(s).`);
-    },
+    onSuccess: (response) => setStatusMessage(`已索引 ${response.metadata_count} 个文本块。`),
     onError: (error) => setStatusMessage(error.message),
   });
   const analyzeMutation = useMutation({
     mutationFn: apiClient.analyze,
     onSuccess: (response) => {
-      setStatusMessage(`Generated ${response.reports.length} report(s).`);
+      setStatusMessage(`已生成 ${response.reports.length} 份报告。`);
       queryClient.invalidateQueries({ queryKey: ["reports"] });
     },
     onError: (error) => setStatusMessage(error.message),
@@ -112,25 +139,55 @@ export function Dashboard() {
   function handleCollect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedCompetitorId || !sourceUrl) {
-      setStatusMessage("Select a competitor and enter a source URL.");
+      setStatusMessage("请先选择竞品并输入来源 URL。");
       return;
     }
-    collectMutation.mutate({
+    collectMutation.mutate({ competitor_id: selectedCompetitorId, source_url: sourceUrl, crawler });
+  }
+
+  function handleSaveSource() {
+    if (!selectedCompetitorId || !sourceUrl) {
+      setStatusMessage("请先选择竞品并输入来源 URL。");
+      return;
+    }
+    createSourceMutation.mutate({
       competitor_id: selectedCompetitorId,
+      name: sourceName || sourceUrl,
       source_url: sourceUrl,
       crawler,
+      interval_minutes: 1440,
+      enabled: true,
     });
   }
 
   function handleAnalyze() {
     if (!selectedCompetitorId) {
-      setStatusMessage("Select a competitor first.");
+      setStatusMessage("请先选择竞品。");
       return;
     }
-    analyzeMutation.mutate({
-      competitor_id: selectedCompetitorId,
-      query,
-      context_limit: 5,
+    analyzeMutation.mutate({ competitor_id: selectedCompetitorId, query, context_limit: 5 });
+  }
+
+  function handleStreamAnalyze() {
+    if (!selectedCompetitorId) {
+      setStatusMessage("请先选择竞品。");
+      return;
+    }
+    setStreamMessage("正在建立分析流...");
+    const source = new EventSource(
+      apiClient.analyzeStreamUrl({ competitor_id: selectedCompetitorId, query, context_limit: 5 }),
+    );
+    source.addEventListener("started", () => setStreamMessage("分析已开始"));
+    source.addEventListener("retrieving", () => setStreamMessage("正在检索 RAG 上下文"));
+    source.addEventListener("completed", () => {
+      setStreamMessage("分析完成，正在刷新报告");
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      source.close();
+    });
+    source.addEventListener("error", (event) => {
+      setStreamMessage("分析流异常或已结束");
+      source.close();
+      console.error(event);
     });
   }
 
@@ -139,41 +196,26 @@ export function Dashboard() {
       <section className="border-b bg-card">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-medium text-primary">Competitive Intelligence</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-normal">Operations Dashboard</h1>
+            <p className="text-sm font-medium text-primary">竞品情报系统</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-normal">运营工作台</h1>
           </div>
           <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-muted-foreground">
             <Activity className="h-4 w-4 text-primary" />
-            RAG and Agent workflow ready
+            RAG 与 Agent 工作流已接入
           </div>
         </div>
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-5 px-6 py-6">
         <div className="grid gap-5 md:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>Monitored Competitors</CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-semibold">{competitors.length}</CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Enabled Sources</CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-semibold">{enabledCount}</CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Risk Reports</CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-semibold">{reports.length}</CardContent>
-          </Card>
+          <MetricCard title="监控竞品" value={competitors.length} />
+          <MetricCard title="启用竞品" value={enabledCount} />
+          <MetricCard title="分析报告" value={reports.length} />
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Competitor Management</CardTitle>
+            <CardTitle>竞品管理</CardTitle>
           </CardHeader>
           <CardContent>
             <CompetitorForm
@@ -183,16 +225,14 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
           <Card>
             <CardHeader>
-              <CardTitle>Competitors</CardTitle>
+              <CardTitle>竞品列表</CardTitle>
             </CardHeader>
             <CardContent>
               {competitors.length === 0 ? (
-                <div className="flex min-h-44 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-                  Add a competitor to begin tracking public signals.
-                </div>
+                <EmptyState text="先添加一个竞品，再开始采集公开信号。" />
               ) : (
                 <div className="divide-y">
                   {competitors.map((competitor) => (
@@ -204,11 +244,11 @@ export function Dashboard() {
                       >
                         <p className="truncate font-medium">{competitor.name}</p>
                         <p className="truncate text-sm text-muted-foreground">
-                          {competitor.industry} · {competitor.keywords.join(", ") || "No keywords"}
+                          {competitor.industry} · {competitor.keywords.join(", ") || "暂无关键词"}
                         </p>
                       </button>
                       <Button
-                        aria-label={`Delete ${competitor.name}`}
+                        aria-label={`删除 ${competitor.name}`}
                         variant="ghost"
                         size="icon"
                         onClick={() => deleteMutation.mutate(competitor.id)}
@@ -224,7 +264,7 @@ export function Dashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Collection And Analysis</CardTitle>
+              <CardTitle>采集、索引与分析</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
               <select
@@ -232,7 +272,7 @@ export function Dashboard() {
                 value={selectedCompetitorId}
                 onChange={(event) => setSelectedCompetitorId(event.target.value)}
               >
-                <option value="">Select competitor</option>
+                <option value="">选择竞品</option>
                 {competitors.map((competitor) => (
                   <option key={competitor.id} value={competitor.id}>
                     {competitor.name}
@@ -240,64 +280,88 @@ export function Dashboard() {
                 ))}
               </select>
 
-              <form className="grid gap-3 md:grid-cols-[120px_1fr_auto]" onSubmit={handleCollect}>
+              <form className="grid gap-3 md:grid-cols-[110px_1fr_1fr_auto]" onSubmit={handleCollect}>
                 <select
                   className="h-10 rounded-md border border-input bg-background px-3 text-sm"
                   value={crawler}
                   onChange={(event) => setCrawler(event.target.value as "rss" | "web")}
                 >
                   <option value="rss">RSS</option>
-                  <option value="web">Web</option>
+                  <option value="web">网页</option>
                 </select>
-                <Input
-                  placeholder="https://example.com/feed.xml"
-                  value={sourceUrl}
-                  onChange={(event) => setSourceUrl(event.target.value)}
-                />
+                <Input placeholder="数据源名称" value={sourceName} onChange={(event) => setSourceName(event.target.value)} />
+                <Input placeholder="https://example.com/feed.xml" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
                 <Button type="submit" disabled={collectMutation.isPending}>
                   <Search className="h-4 w-4" />
-                  Collect
+                  采集
                 </Button>
               </form>
 
-              <div className="grid gap-3 md:grid-cols-[1fr_auto_auto]">
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="latest competitive signals"
-                />
-                <Button
-                  variant="outline"
-                  disabled={!selectedCompetitorId || indexMutation.isPending}
-                  onClick={() => indexMutation.mutate(selectedCompetitorId)}
-                >
+              <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto_auto]">
+                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="最新竞品动态" />
+                <Button variant="outline" disabled={!selectedCompetitorId} onClick={handleSaveSource}>
+                  保存源
+                </Button>
+                <Button variant="outline" disabled={!selectedCompetitorId} onClick={() => indexMutation.mutate(selectedCompetitorId)}>
                   <Database className="h-4 w-4" />
-                  Index
+                  索引
                 </Button>
                 <Button disabled={!selectedCompetitorId || analyzeMutation.isPending} onClick={handleAnalyze}>
                   <Play className="h-4 w-4" />
-                  Analyze
+                  分析
+                </Button>
+                <Button variant="outline" disabled={!selectedCompetitorId} onClick={handleStreamAnalyze}>
+                  流式
                 </Button>
               </div>
 
               <div className="rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                {selectedCompetitor ? `Selected: ${selectedCompetitor.name}` : "No competitor selected"}
+                {selectedCompetitor ? `当前竞品：${selectedCompetitor.name}` : "尚未选择竞品"}
                 {statusMessage ? ` · ${statusMessage}` : ""}
+                {streamMessage ? ` · ${streamMessage}` : ""}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+        <div className="grid gap-5 lg:grid-cols-3">
           <Card>
             <CardHeader>
-              <CardTitle>Collected Articles</CardTitle>
+              <CardTitle>保存的数据源</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(sourcesQuery.data ?? []).length === 0 ? (
+                <EmptyState text="暂无保存的数据源。" />
+              ) : (
+                <div className="divide-y">
+                  {(sourcesQuery.data ?? []).map((source) => (
+                    <div key={source.id} className="grid gap-2 py-3">
+                      <p className="truncate font-medium">{source.name}</p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {source.crawler === "rss" ? "RSS" : "网页"} · 每 {source.interval_minutes} 分钟
+                      </p>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => collectSourceMutation.mutate(source.id)}>
+                          立即采集
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => deleteSourceMutation.mutate(source.id)}>
+                          删除
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>已采集文章</CardTitle>
             </CardHeader>
             <CardContent>
               {(articlesQuery.data ?? []).length === 0 ? (
-                <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-                  No collected articles yet.
-                </div>
+                <EmptyState text="暂无采集文章。" />
               ) : (
                 <div className="divide-y">
                   {(articlesQuery.data ?? []).slice(0, 6).map((article) => (
@@ -315,26 +379,23 @@ export function Dashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Agent Reports</CardTitle>
+              <CardTitle>Agent 报告</CardTitle>
             </CardHeader>
             <CardContent>
               {reports.length === 0 ? (
-                <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-md border border-dashed text-center text-sm text-muted-foreground">
-                  <FileText className="h-5 w-5 text-primary" />
-                  Run analysis after collecting and indexing articles.
-                </div>
+                <EmptyState icon={<FileText className="h-5 w-5 text-primary" />} text="采集并索引后运行分析。" />
               ) : (
                 <div className="divide-y">
                   {reports.slice(0, 6).map((report) => (
-                    <div key={report.id} className="py-3">
+                    <button key={report.id} className="w-full py-3 text-left" onClick={() => setSelectedReport(report)}>
                       <div className="flex items-center justify-between gap-3">
-                        <p className="font-medium capitalize">{report.dimension}</p>
-                        <span className="rounded-md border px-2 py-1 text-xs uppercase text-muted-foreground">
-                          {report.risk_level}
+                        <p className="font-medium">{dimensionLabel[report.dimension]}</p>
+                        <span className="rounded-md border px-2 py-1 text-xs text-muted-foreground">
+                          {riskLabel[report.risk_level]}
                         </span>
                       </div>
-                      <p className="mt-2 text-sm text-muted-foreground">{report.summary}</p>
-                    </div>
+                      <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{report.summary}</p>
+                    </button>
                   ))}
                 </div>
               )}
@@ -342,58 +403,98 @@ export function Dashboard() {
           </Card>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-2">
+        {selectedReport ? (
           <Card>
             <CardHeader>
-              <CardTitle>Industry Trend</CardTitle>
+              <CardTitle>报告详情 · {dimensionLabel[selectedReport.dimension]}</CardTitle>
             </CardHeader>
-            <CardContent className="h-72">
-              {industryData.length === 0 ? (
-                <div className="flex h-full items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-                  No competitor data available.
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={industryData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="industry" />
-                    <YAxis allowDecimals={false} />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
+            <CardContent className="grid gap-4 text-sm">
+              <p>{selectedReport.summary}</p>
+              <DetailList title="机会点" items={selectedReport.opportunity_points} />
+              <DetailList title="威胁点" items={selectedReport.threat_points} />
+              <p className="text-muted-foreground">
+                风险等级：{riskLabel[selectedReport.risk_level]} · 置信度：
+                {(selectedReport.confidence_score * 100).toFixed(0)}%
+              </p>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Risk Radar</CardTitle>
-            </CardHeader>
-            <CardContent className="h-72">
-              {reports.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center gap-3 rounded-md border border-dashed text-sm text-muted-foreground">
-                  <RadarIcon className="h-5 w-5 text-primary" />
-                  Risk distribution appears after analysis.
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={riskData}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="level" />
-                    <Radar dataKey="count" fill="hsl(var(--accent))" fillOpacity={0.35} stroke="hsl(var(--accent))" />
-                    <Tooltip />
-                  </RadarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {competitorsQuery.isError ? (
-          <p className="text-sm text-destructive">Unable to load competitors. Check backend connectivity.</p>
         ) : null}
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          <ChartCard title="行业分布" empty={industryData.length === 0}>
+            <BarChart data={industryData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="industry" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartCard>
+          <ChartCard title="风险雷达" empty={reports.length === 0} icon={<RadarIcon className="h-5 w-5 text-primary" />}>
+            <RadarChart data={riskData}>
+              <PolarGrid />
+              <PolarAngleAxis dataKey="level" />
+              <Radar dataKey="count" fill="hsl(var(--accent))" fillOpacity={0.35} stroke="hsl(var(--accent))" />
+              <Tooltip />
+            </RadarChart>
+          </ChartCard>
+        </div>
       </section>
     </main>
+  );
+}
+
+function MetricCard({ title, value }: { title: string; value: number }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="text-3xl font-semibold">{value}</CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ text, icon }: { text: string; icon?: React.ReactNode }) {
+  return (
+    <div className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-md border border-dashed text-center text-sm text-muted-foreground">
+      {icon}
+      {text}
+    </div>
+  );
+}
+
+function DetailList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <p className="font-medium">{title}</p>
+      <ul className="mt-2 grid gap-1 text-muted-foreground">
+        {items.length === 0 ? <li>暂无</li> : items.map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+function ChartCard({
+  title,
+  empty,
+  icon,
+  children,
+}: { title: string; empty: boolean; icon?: React.ReactNode; children: React.ReactElement }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="h-72">
+        {empty ? (
+          <EmptyState text="暂无可视化数据。" icon={icon} />
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            {children}
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
   );
 }

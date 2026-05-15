@@ -14,6 +14,7 @@ from app.schemas.collection import CollectRequest, CollectResponse, IndexCompeti
 from app.services.collection_service import CollectionService
 from app.services.competitor_service import CompetitorService
 from app.services.rag_service import RagService
+from app.services.source_config_service import SourceConfigService
 
 router = APIRouter()
 DbSession = Annotated[Session, Depends(get_db)]
@@ -59,3 +60,23 @@ def index_competitor_articles(competitor_id: UUID, db: DbSession) -> IndexCompet
 
     return IndexCompetitorResponse(competitor_id=competitor_id, metadata_count=len(metadata))
 
+
+@router.post("/sources/{source_id}/collect", response_model=CollectResponse)
+def collect_source(source_id: UUID, db: DbSession) -> CollectResponse:
+    """Collect articles from a saved source configuration."""
+    source = SourceConfigService(db).get_source(source_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
+    crawler = RssCrawler() if source.crawler == "rss" else WebCrawler()
+    try:
+        articles = CollectionService(db).collect_for_competitor(
+            competitor_id=source.competitor_id,
+            source_url=source.source_url,
+            crawler=crawler,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Collection failed: {exc}",
+        ) from exc
+    return CollectResponse(collected_count=len(articles), articles=articles)

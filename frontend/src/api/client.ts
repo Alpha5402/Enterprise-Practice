@@ -47,6 +47,27 @@ export interface AnalysisReport {
   created_at: string;
 }
 
+export interface SourceConfig {
+  id: string;
+  competitor_id: string;
+  name: string;
+  source_url: string;
+  crawler: "rss" | "web";
+  interval_minutes: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SourceConfigCreate {
+  competitor_id: string;
+  name: string;
+  source_url: string;
+  crawler: "rss" | "web";
+  interval_minutes: number;
+  enabled: boolean;
+}
+
 export interface CollectRequest {
   competitor_id: string;
   source_url: string;
@@ -100,6 +121,8 @@ export const apiClient = {
     request<NewsArticle[]>(competitorId ? `/articles?competitor_id=${competitorId}` : "/articles"),
   listReports: (competitorId?: string) =>
     request<AnalysisReport[]>(competitorId ? `/reports?competitor_id=${competitorId}` : "/reports"),
+  listSources: (competitorId?: string) =>
+    request<SourceConfig[]>(competitorId ? `/sources?competitor_id=${competitorId}` : "/sources"),
   createCompetitor: (payload: CompetitorCreate) =>
     request<Competitor>("/competitors", {
       method: "POST",
@@ -114,6 +137,19 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  createSource: (payload: SourceConfigCreate) =>
+    request<SourceConfig>("/sources", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  deleteSource: (id: string) =>
+    request<void>(`/sources/${id}`, {
+      method: "DELETE",
+    }),
+  collectSource: (id: string) =>
+    request<CollectResponse>(`/sources/${id}/collect`, {
+      method: "POST",
+    }),
   indexCompetitor: (competitorId: string) =>
     request<IndexCompetitorResponse>(`/competitors/${competitorId}/index`, {
       method: "POST",
@@ -123,4 +159,12 @@ export const apiClient = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  analyzeStreamUrl: (payload: AnalyzeRequest) => {
+    const params = new URLSearchParams({
+      competitor_id: payload.competitor_id,
+      query: payload.query,
+      context_limit: String(payload.context_limit),
+    });
+    return `${API_BASE_URL}/analyze/stream?${params.toString()}`;
+  },
 };
