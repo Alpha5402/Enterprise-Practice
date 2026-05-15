@@ -26,6 +26,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
+The backend container runs `alembic upgrade head` before starting FastAPI, so a fresh PostgreSQL volume is migrated automatically.
+
 Backend docs are available at `http://localhost:8000/docs`.
 Frontend is available at `http://localhost:5173`.
 
@@ -34,4 +36,3 @@ Frontend is available at `http://localhost:5173`.
 ```bash
 scripts/check.sh
 ```
-
