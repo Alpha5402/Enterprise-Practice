@@ -1,13 +1,15 @@
 """Competitive analysis API endpoints."""
 
 import json
+from queue import Queue
+from threading import Thread
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
 from app.rag.exceptions import RagConfigurationError
 from app.schemas.analysis import AnalyzeRequest, AnalyzeResponse
 from app.services.analysis_service import AnalysisService
@@ -43,7 +45,6 @@ def analyze(payload: AnalyzeRequest, db: DbSession) -> AnalyzeResponse:
 
 @router.get("/stream")
 def analyze_stream(
-    db: DbSession,
     competitor_id: str,
     query: str = "latest competitive signals",
     context_limit: int = 5,
@@ -51,22 +52,40 @@ def analyze_stream(
     """Stream analysis progress with server-sent events."""
 
     def event_stream() -> object:
+        event_queue: Queue[tuple[str, dict[str, object]] | None] = Queue()
+
+        def emit(event: str, data: dict[str, object]) -> None:
+            event_queue.put((event, data))
+
+        def run_analysis() -> None:
+            db = SessionLocal()
+            try:
+                payload = AnalyzeRequest(
+                    competitor_id=competitor_id,
+                    query=query,
+                    context_limit=context_limit,
+                )
+                reports = AnalysisService(db).analyze_competitor(
+                    competitor_id=payload.competitor_id,
+                    query=payload.query,
+                    context_limit=payload.context_limit,
+                    event_handler=emit,
+                )
+                emit("completed", {"reports": [report.id for report in reports]})
+            except Exception as exc:
+                emit("error", {"message": str(exc)})
+            finally:
+                db.close()
+                event_queue.put(None)
+
         yield _sse("started", {"message": "analysis started"})
-        try:
-            payload = AnalyzeRequest(
-                competitor_id=competitor_id,
-                query=query,
-                context_limit=context_limit,
-            )
-            yield _sse("retrieving", {"message": "retrieving indexed context"})
-            reports = AnalysisService(db).analyze_competitor(
-                competitor_id=payload.competitor_id,
-                query=payload.query,
-                context_limit=payload.context_limit,
-            )
-            yield _sse("completed", {"reports": [report.id for report in reports]})
-        except Exception as exc:
-            yield _sse("error", {"message": str(exc)})
+        Thread(target=run_analysis, daemon=True).start()
+        while True:
+            item = event_queue.get()
+            if item is None:
+                break
+            event, data = item
+            yield _sse(event, data)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

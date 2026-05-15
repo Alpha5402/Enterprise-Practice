@@ -50,6 +50,7 @@ export function Dashboard() {
   const [query, setQuery] = useState("最新竞品动态");
   const [statusMessage, setStatusMessage] = useState("");
   const [streamMessage, setStreamMessage] = useState("");
+  const [progressLines, setProgressLines] = useState<string[]>([]);
 
   const competitorsQuery = useQuery({ queryKey: ["competitors"], queryFn: apiClient.listCompetitors });
   const reportsQuery = useQuery({
@@ -171,19 +172,33 @@ export function Dashboard() {
       setStatusMessage("请先选择竞品。");
       return;
     }
+    setProgressLines(["分析流已建立"]);
     setStreamMessage("正在建立分析流...");
     const source = new EventSource(
       apiClient.analyzeStreamUrl({ competitor_id: selectedCompetitorId, query, context_limit: 5 }),
     );
-    source.addEventListener("started", () => setStreamMessage("分析已开始"));
-    source.addEventListener("retrieving", () => setStreamMessage("正在检索 RAG 上下文"));
+    const pushProgress = (line: string) => setProgressLines((lines) => [...lines.slice(-6), line]);
+    const readData = (event: MessageEvent) => JSON.parse(event.data || "{}") as Record<string, unknown>;
+    source.addEventListener("started", () => { setStreamMessage("分析已开始"); pushProgress("工作流已启动"); });
+    source.addEventListener("retrieving", () => pushProgress("正在检索 RAG 上下文"));
+    source.addEventListener("retrieved", (event) => pushProgress(`已检索 ${readData(event as MessageEvent).context_count ?? 0} 条上下文`));
+    source.addEventListener("agent_started", (event) => pushProgress(`${readData(event as MessageEvent).agent ?? "agent"} 开始分析`));
+    source.addEventListener("agent_completed", (event) => {
+      const data = readData(event as MessageEvent);
+      pushProgress(`${data.agent ?? "agent"} 完成 · ${data.elapsed_ms ?? 0}ms`);
+    });
+    source.addEventListener("agent_failed", (event) => pushProgress(`${readData(event as MessageEvent).agent ?? "agent"} 失败`));
+    source.addEventListener("persisting", () => pushProgress("正在保存结构化报告"));
+    source.addEventListener("persisted", (event) => pushProgress(`已保存 ${readData(event as MessageEvent).report_count ?? 0} 份报告`));
     source.addEventListener("completed", () => {
       setStreamMessage("分析完成，正在刷新报告");
+      pushProgress("分析完成");
       queryClient.invalidateQueries({ queryKey: ["reports"] });
       source.close();
     });
     source.addEventListener("error", (event) => {
       setStreamMessage("分析流异常或已结束");
+      pushProgress("分析流异常或已结束");
       source.close();
       console.error(event);
     });
@@ -318,6 +333,12 @@ export function Dashboard() {
                 {statusMessage ? ` · ${statusMessage}` : ""}
                 {streamMessage ? ` · ${streamMessage}` : ""}
               </div>
+              {progressLines.length > 0 ? (
+                <div className="grid gap-1 rounded-md border px-3 py-3 text-sm">
+                  <p className="font-medium">Agent 实时进度</p>
+                  {progressLines.map((line, index) => <p key={`${line}-${index}`} className="text-muted-foreground">{line}</p>)}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </div>

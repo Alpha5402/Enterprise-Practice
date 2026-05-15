@@ -1,6 +1,8 @@
 """LangGraph workflow for competitive intelligence analysis."""
 
 import json
+from collections.abc import Callable
+from time import perf_counter
 from typing import Any, Protocol, TypedDict
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -9,6 +11,8 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agents.prompts import load_prompt
 from app.schemas.analysis import StructuredAnalysisOutput
+
+WorkflowEventHandler = Callable[[str, dict[str, object]], None]
 
 
 class ChatInvoker(Protocol):
@@ -32,9 +36,14 @@ class AnalysisWorkflowState(TypedDict, total=False):
 class AnalysisWorkflow:
     """Run multi-agent competitive analysis with LangGraph."""
 
-    def __init__(self, chat_model: BaseChatModel | ChatInvoker) -> None:
+    def __init__(
+        self,
+        chat_model: BaseChatModel | ChatInvoker,
+        event_handler: WorkflowEventHandler | None = None,
+    ) -> None:
         """Initialize the workflow with a LangChain chat model."""
         self.chat_model = chat_model
+        self.event_handler = event_handler
         self.graph = self._build_graph()
 
     def run(self, competitor: str, context: str) -> list[StructuredAnalysisOutput]:
@@ -90,15 +99,38 @@ class AnalysisWorkflow:
         context: str,
     ) -> StructuredAnalysisOutput:
         """Invoke one agent and parse strict JSON output."""
+        started_at = perf_counter()
+        self._emit("agent_started", {"agent": f"{prompt_name}_agent"})
         prompt = load_prompt(prompt_name)
-        response = self.chat_model.invoke(
-            [
-                SystemMessage(content=prompt),
-                HumanMessage(content=self._user_message(competitor, context)),
-            ]
+        try:
+            response = self.chat_model.invoke(
+                [
+                    SystemMessage(content=prompt),
+                    HumanMessage(content=self._user_message(competitor, context)),
+                ]
+            )
+            content = response.content if hasattr(response, "content") else str(response)
+            output = StructuredAnalysisOutput.model_validate_json(str(content))
+        except Exception as exc:
+            self._emit("agent_failed", {"agent": f"{prompt_name}_agent", "message": str(exc)})
+            raise
+
+        elapsed_ms = round((perf_counter() - started_at) * 1000)
+        self._emit(
+            "agent_completed",
+            {
+                "agent": f"{prompt_name}_agent",
+                "dimension": output.dimension,
+                "risk_level": output.risk_level,
+                "elapsed_ms": elapsed_ms,
+            },
         )
-        content = response.content if hasattr(response, "content") else str(response)
-        return StructuredAnalysisOutput.model_validate_json(str(content))
+        return output
+
+    def _emit(self, event: str, data: dict[str, object]) -> None:
+        """Emit one workflow event when a handler is configured."""
+        if self.event_handler is not None:
+            self.event_handler(event, data)
 
     def _user_message(self, competitor: str, context: str) -> str:
         """Create the user message shared by analysis agents."""

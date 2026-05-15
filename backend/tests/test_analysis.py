@@ -88,6 +88,29 @@ def test_analysis_workflow_returns_all_dimensions() -> None:
     ]
 
 
+def test_analysis_workflow_emits_agent_events() -> None:
+    """LangGraph workflow emits per-agent progress events."""
+    events: list[tuple[str, dict[str, object]]] = []
+    workflow = AnalysisWorkflow(
+        FakeChatModel(),
+        event_handler=lambda event, data: events.append((event, data)),
+    )
+    workflow.run(
+        competitor="Acme Cloud",
+        context="Acme changed pricing and launched a product.",
+    )
+
+    event_names = [event for event, _ in events]
+    assert event_names.count("agent_started") == 4
+    assert event_names.count("agent_completed") == 4
+    assert {data["agent"] for event, data in events if event == "agent_completed"} == {
+        "sentiment_agent",
+        "price_agent",
+        "product_agent",
+        "summary_agent",
+    }
+
+
 def test_analysis_service_persists_reports(db_session: Session) -> None:
     """Analysis service persists all workflow outputs as reports."""
     competitor = create_competitor(db_session)
@@ -144,4 +167,3 @@ def test_analyze_api_returns_409_without_rag_context(db_session: Session) -> Non
     )
 
     assert response.status_code in {409, 503}
-
