@@ -1,76 +1,73 @@
-# Competitive Intelligence System
+# 企业竞争情报系统
 
-Enterprise-grade competitive dynamics tracking and benchmark analysis system based on Claude, LangChain, LangGraph, FastAPI, and React.
+基于 DeepSeek、LangChain、LangGraph、FastAPI 和 React 的企业级竞争动态跟踪与标杆分析系统。项目提供从竞品管理、数据采集、RAG 索引到 AI 分析报告生成的端到端工作流，并配套简体中文运营仪表盘。
 
-## Stage 1 Scope
+## 当前能力
 
-- Docker Compose runtime for backend, frontend, PostgreSQL, Redis, and ChromaDB.
-- FastAPI backend with versioned API routing.
-- SQLAlchemy model and Alembic migration for competitor management.
-- Competitor CRUD API for listing, creating, and deleting competitors.
-- React, TypeScript, Vite, TailwindCSS, shadcn/ui-compatible foundation.
-- API-backed dashboard with competitor management and empty states for future reports.
+- Docker Compose 一键启动后端、前端、PostgreSQL、Redis 和 ChromaDB。
+- 后端启动前自动执行 Alembic 迁移，新数据库卷可直接初始化表结构。
+- FastAPI 分版本 API，提供竞品、采集、文章、索引、分析、报告与自动化接口。
+- SQLAlchemy 数据模型覆盖竞品、新闻文章、分析报告、嵌入元数据和采集源。
+- RSS 与网页采集器会统一清洗文本，并可保存为可复用采集源。
+- RAG 索引使用 LangChain 兼容文本切分与 Chroma 向量存储。
+- AI 分析使用 DeepSeek Chat Model，并通过 LangGraph 编排舆情、价格、产品和汇总分析节点。
+- 前端使用 React、TypeScript、Vite、TailwindCSS 与 shadcn/ui 风格组件。
+- 中文运营仪表盘支持竞品维护、采集、索引、分析、SSE 实时进度、报告查看和基础可视化。
 
-## Stage 2 Scope
-
-- SQLAlchemy models and Alembic migration for `news_articles`, `analysis_reports`, and `embeddings_metadata`.
-- Modular RSS and webpage crawlers with normalized article output.
-- Text cleaning service for crawler output.
-- APScheduler service boundary for recurring RSS collection jobs.
-- Report read APIs: `GET /api/v1/reports` and `GET /api/v1/reports/{id}`.
-
-## Stage 3 Scope
-
-- Text chunking for collected article content.
-- LangChain-compatible local embedding provider for RAG indexing.
-- `VectorStoreService` abstraction with ChromaDB implementation.
-- RAG indexing service that stores chunks in Chroma and records `embeddings_metadata`.
-- RAG retrieval API for semantically searching indexed chunks.
-
-## Stage 4 Scope
-
-- Prompt files for sentiment, price, product, and summary agents.
-- LangGraph workflow that runs dimension agents and produces a summary report.
-- DeepSeek chat model integration through LangChain.
-- Strict Pydantic JSON parsing for agent outputs.
-- Analysis API: `POST /api/v1/analyze`.
-
-## Stage 5 Scope
-
-- Collection API: `POST /api/v1/collect`.
-- Article list API: `GET /api/v1/articles`.
-- Competitor batch indexing API: `POST /api/v1/competitors/{id}/index`.
-- Frontend operations dashboard for collect, index, analyze, and report review.
-
-## Local Development
+## 快速开始
 
 ```bash
 cp .env.example .env
+```
+
+编辑 `.env`，至少填写：
+
+```bash
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+```
+
+启动服务：
+
+```bash
 docker compose up --build
 ```
 
-The backend container runs `alembic upgrade head` before starting FastAPI, so a fresh PostgreSQL volume is migrated automatically.
+访问地址：
 
-Backend docs are available at `http://localhost:8000/docs`.
-Frontend is available at `http://localhost:5173`.
+- 前端仪表盘：http://localhost:5173
+- 后端 API 文档：http://localhost:8000/docs
 
-DeepSeek model calls require `DEEPSEEK_API_KEY` in `.env`. RAG indexing uses a LangChain-compatible local embedding adapter backed by Chroma's default embedding function.
+## 使用流程
 
-Basic workflow:
+1. 在仪表盘中新建竞品。
+2. 选择一个竞品作为当前工作对象。
+3. 输入 RSS 或网页地址并执行采集，也可以保存为长期采集源。
+4. 对已采集文章执行 RAG 索引。
+5. 运行 DeepSeek + LangGraph 分析流程。
+6. 在报告区查看风险等级、摘要、机会、风险与证据来源。
 
-1. Create a competitor.
-2. Select the competitor in the dashboard.
-3. Collect from an RSS or web URL.
-4. Index collected articles.
-5. Run analysis and review generated reports.
+## 主要接口
 
-Automation endpoint:
+- `GET /api/v1/competitors`：获取竞品列表。
+- `POST /api/v1/competitors`：创建竞品。
+- `DELETE /api/v1/competitors/{id}`：删除竞品。
+- `POST /api/v1/collect`：按 URL 采集 RSS 或网页内容。
+- `GET /api/v1/articles`：查询采集文章。
+- `POST /api/v1/competitors/{id}/index`：为竞品文章建立 RAG 索引。
+- `POST /api/v1/analyze`：运行分析并生成报告。
+- `GET /api/v1/reports`：查询分析报告。
+- `POST /api/v1/automation/daily-run`：对已保存采集源执行一次采集、索引和分析。
 
-- `POST /api/v1/automation/daily-run` runs saved-source collection, indexing, and analysis once.
-
-
-## Quality Checks
+## 本地检查
 
 ```bash
 scripts/check.sh
 ```
+
+该脚本会执行后端 pytest、前端 ESLint 和前端生产构建。
+
+## 注意事项
+
+- DeepSeek 调用依赖 `.env` 中的 `DEEPSEEK_API_KEY`。
+- RAG 索引默认使用 Chroma 的本地嵌入函数；首次索引时，运行环境可能需要缓存或下载对应嵌入模型。
+- 前端生产构建若出现 Vite chunk size 提示，属于当前依赖体积的构建提醒，不影响系统运行。

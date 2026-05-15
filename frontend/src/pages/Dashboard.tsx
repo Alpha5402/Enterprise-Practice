@@ -486,7 +486,7 @@ function ChartCard({
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="h-72">
+      <CardContent className={empty ? undefined : "h-72"}>
         {empty ? (
           <EmptyState text="暂无可视化数据。" icon={icon} />
         ) : (
