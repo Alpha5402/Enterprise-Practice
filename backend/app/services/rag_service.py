@@ -49,7 +49,7 @@ class RagService:
         chunks = self.chunker.split(article.cleaned_content)
         vector_store = self._vector_store()
         embedding_provider = self._embedding_provider()
-        embeddings = embedding_provider.embed_documents([chunk.text for chunk in chunks])
+        embeddings = self._embed_documents(embedding_provider, [chunk.text for chunk in chunks])
         if len(embeddings) != len(chunks):
             raise ValueError("Embedding provider returned an unexpected number of vectors")
 
@@ -100,7 +100,7 @@ class RagService:
     ) -> list[RagSearchResult]:
         """Retrieve semantically relevant chunks from the vector store."""
         where = {"competitor_id": str(competitor_id)} if competitor_id is not None else None
-        query_embedding = self._embedding_provider().embed_query(query)
+        query_embedding = self._embed_query(query)
         results = self._vector_store().search(
             query_embedding=query_embedding,
             limit=limit,
@@ -130,3 +130,21 @@ class RagService:
             except Exception as exc:
                 raise RagConfigurationError("Vector store is unavailable") from exc
         return self.vector_store
+
+    def _embed_documents(
+        self,
+        embedding_provider: Embeddings,
+        texts: list[str],
+    ) -> list[list[float]]:
+        """Embed documents and normalize provider failures."""
+        try:
+            return embedding_provider.embed_documents(texts)
+        except Exception as exc:
+            raise RagConfigurationError("Embedding provider is unavailable") from exc
+
+    def _embed_query(self, query: str) -> list[float]:
+        """Embed a query and normalize provider failures."""
+        try:
+            return self._embedding_provider().embed_query(query)
+        except Exception as exc:
+            raise RagConfigurationError("Embedding provider is unavailable") from exc

@@ -27,6 +27,14 @@ Enterprise-grade competitive dynamics tracking and benchmark analysis system bas
 - RAG indexing service that stores chunks in Chroma and records `embeddings_metadata`.
 - RAG retrieval API for semantically searching indexed chunks.
 
+## Stage 4 Scope
+
+- Prompt files for sentiment, price, product, and summary agents.
+- LangGraph workflow that runs dimension agents and produces a summary report.
+- DeepSeek chat model integration through LangChain.
+- Strict Pydantic JSON parsing for agent outputs.
+- Analysis API: `POST /api/v1/analyze`.
+
 ## Local Development
 
 ```bash

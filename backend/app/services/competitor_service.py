@@ -29,6 +29,10 @@ class CompetitorService:
         self.db.refresh(competitor)
         return competitor
 
+    def get_competitor(self, competitor_id: UUID) -> Competitor | None:
+        """Return a competitor by id."""
+        return self.db.get(Competitor, competitor_id)
+
     def delete_competitor(self, competitor_id: UUID) -> bool:
         """Delete a competitor by id and report whether it existed."""
         competitor = self.db.get(Competitor, competitor_id)
@@ -37,4 +41,3 @@ class CompetitorService:
         self.db.delete(competitor)
         self.db.commit()
         return True
-
